@@ -1,0 +1,278 @@
+---
+title: "Prediction of cancer disease by machine learning"
+output: html_notebook
+---
+
+In this project, I aimed to predict cancer levels using available clinicopathological parameters. To compare the performance of different machine learning frameworks and algorithms, I utilized both TensorFlow in Python and caret in R.
+
+TensorFlow and caret are both machine learning frameworks that are used for building and training predictive models. However, they have some differences in terms of their design, implementation, and use cases.
+
+TensorFlow is a powerful open-source framework developed by Google that is primarily used for deep learning applications. It allows users to build complex neural networks and train them on large datasets using distributed computing. TensorFlow is known for its flexibility, scalability, and high performance.
+
+Caret is a machine learning package for R that provides a wide range of algorithms and tools for building predictive models. Caret is designed to be easy to use and provides a unified interface for training, testing, and tuning models. It supports a variety of machine-learning techniques, including regression, classification, and clustering.
+
+For their strengths and weaknesses, TensorFlow is often preferred for deep learning tasks that require large amounts of data and complex architectures. Caret is more suitable for traditional machine-learning problems that involve smaller datasets and simpler models. However, both frameworks can be used for a wide range of applications and are widely used in industry and academia.
+
+I carried out the coding for this project under the Rstudio platform (2022.07.2 Build 576) as it allowed the implementation of both python and R. This made side-by-side comparison easier. However, the code script of Tensorflow fully worked in JupyterLab (Version 3.4.5-1) as well.
+
+
+# TensorFlow
+
+## Import Libraries
+
+```{python}
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras import datasets, layers, models
+from tensorflow.keras.utils import to_categorical ## converting categorical variables into one-hot encoded vectors.
+from sklearn.preprocessing import LabelEncoder ## converting categorical labels into numerical values.
+from sklearn.model_selection import train_test_split ## splitting a dataset into training and testing subsets.
+from sklearn.metrics import mean_squared_error
+
+print(tf.__version__)
+```
+
+## Load the data
+
+```{python}
+df = pd.read_csv("cancer patient data sets.csv", sep=",")
+df.head()
+list(df.columns)
+```
+
+## Creat the input features "X" and the target variable "y"
+
+During this process, the 'Patient Id' was excluded as it is not a predictor. 
+
+```{python}
+X = df.iloc[:,1:24].values
+y = df.iloc[:,24].values
+
+# Print first five X and y
+print(X[0:5])
+print(y[0:5])
+
+# Output:
+print(X.shape)
+print(y.shape)
+```
+
+## Convert the target into LabelEncoder
+
+This step was to encode the categorical target variables, where each category is represented by a unique integer label. This was realized by using the LabelEncoder class from the sklearn.preprocessing module.
+
+```{python}
+encoder =  LabelEncoder()
+y1 = encoder.fit_transform(y)
+print(y1[0:5])
+```
+
+## Convert the target into one hot encoding
+
+After label encoding, the categorical variables were converted into a set of binary indicator variables. This step is crucial for target variables with non-ordered categories since label encoding can wrongly assume that the categories have an inherent order. 
+
+```{python}
+Y = pd.get_dummies(y1).values
+print(Y[0:5])
+```
+
+## Convert X and Y into train and test data
+
+```{python}
+x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=0)
+
+print(x_train[0:5])
+print(y_train[0:5])
+print(x_test[0:5])
+print(y_test[0:5])
+```
+
+## Define a model
+
+The model has two hidden layers with 10 neurons each and ReLU activation function, and an output layer with 3 neurons and softmax activation function. ReLU (Rectified Linear Unit) is an activation function commonly used in neural networks for deep learning, which returns the input value if it is positive, and zero otherwise. Softmax is a mathematical function that is commonly used as the activation function for the output layer in multi-class classification problems. It is a generalization of the logistic function, which can only output values between 0 and 1, to multiple classes.
+
+```{python}
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(10, activation='relu'),
+    tf.keras.layers.Dense(10, activation='relu'),
+    tf.keras.layers.Dense(3, activation='softmax')
+  ])
+model
+```
+
+## Compile the model
+
+Among the parameters, 'rmsprop' is an optimization algorithm that is commonly used for training neural networks. It is an extension of the gradient descent algorithm that adapts the learning rate of each weight parameter based on the root-mean-square (RMS) gradients. The loss function 'categorical_crossentropy' is used in multiclass classification problems, where the goal is to predict the probability of each class label. It is defined as the negative logarithm of the predicted probability of the true class label: 'loss = -log(predicted_probability_of_true_class)'.
+
+
+```{python}
+model.compile(optimizer='rmsprop',
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+```
+
+## Train the model
+
+The number of epochs and the "batch_size" are hyperparameters that may be tuned to achieve better model performance.
+
+```{python}
+model.fit(x_train, y_train, batch_size=25, epochs=100)
+```
+
+
+## Evaluate the model with test data
+
+```{python}
+loss, accuracy = model.evaluate(x_test, y_test, verbose=0)
+print('Test loss:', loss)
+print('Test accuracy:', accuracy)
+```
+
+## Predict  using the test data
+
+```{python}
+y_pred = model.predict(x_test)
+y_pred
+```
+
+
+## Calculate the RMSE
+
+```{python}
+actual = np.argmax(y_test,axis=1)
+predicted = np.argmax(y_pred,axis=1)
+print(f"Actual: {actual}")
+print(f"Predicted: {predicted}")
+
+# Calculate the RMSE using mean_squared_error function from sklearn.metrics
+rmse = np.sqrt(mean_squared_error(actual, predicted))
+
+# Print the RMSE
+print("RMSE:", "{:.4f}".format(rmse))
+```
+## Calculate other performance matrics
+
+```{python}
+accuracy = tf.keras.metrics.Accuracy()
+accuracy.update_state(actual, predicted)
+print("Accuracy:", accuracy.result().numpy())
+
+precision = tf.keras.metrics.Precision()
+precision.update_state(actual, predicted)
+print("Precision:", precision.result().numpy())
+```
+
+
+# Caret
+
+
+```{r}
+#libraries
+library(reticulate)
+library(tidyverse)
+library(janitor)
+library(caret)
+
+#rmse function
+RMSE <- function(true_value, predicted_value){
+  sqrt(mean((true_value - predicted_value)^2, na.rm = TRUE))
+}
+
+#data
+dat <- py$df %>% 
+  select(-1) %>% 
+  mutate (outcome = as.numeric(factor(.$Level))) %>% 
+  select (-Level) %>% 
+  clean_names 
+
+## dat$outcome <- as.factor(dat$outcome)
+  
+str(dat)
+
+#Create data partition
+inTrain = createDataPartition(y = dat$outcome, p = .80, list = FALSE)
+train_set = dat[inTrain,]
+test_set = dat[-inTrain,] 
+trControl <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 10)
+```
+
+
+## Training using multiple models
+
+```{r, message=FALSE}
+set.seed(123)
+
+#Stochastic Gradient Boosting
+fit_gbm <- train(outcome~., data = train_set, method = "gbm", trControl = trControl)
+
+#CART
+fit_cart <- train(outcome~., data = train_set, method = "rpart", trControl = trControl)
+
+#kNN
+fit_knn <- train(outcome~., data = train_set, method = "knn", trControl = trControl)
+
+#SVM
+fit_svm <- train(outcome~., data = train_set, method = "svmRadial", trControl = trControl)
+
+#Random Forest
+fit_rf <- train(outcome~., data = train_set, method = "ranger", trControl = trControl)
+
+```
+
+
+## Comparison of the results of different models
+
+```{r}
+results <- resamples(list(GBM=fit_gbm, SVM=fit_svm, KNN=fit_knn, RF=fit_rf, CART=fit_cart))
+
+summary(results)
+
+bwplot(results)
+
+dotplot(results)
+```
+
+## The optimal model identified
+
+```{r}
+fit_rf
+summary(fit_rf)
+
+plot(fit_rf)
+
+# predict and RMSE
+predictions <- predict(fit_rf, test_set)
+RMSE_rf <- RMSE(predictions, test_set$outcome)
+
+# A result table is created to collect the RMSE results from different modelling
+rmse_results <- data.frame(Method = "rf", RMSE = RMSE_rf) %>%  print()
+```
+
+## The importance of the predictors indicated by gbm modelling. 
+
+```{r}
+fit_gbm
+summary(fit_gbm)
+plot(fit_gbm)
+
+# predict and RMSE
+predictions <- predict(fit_gbm, test_set)
+RMSE_gbm <- RMSE(predictions, test_set$outcome)
+
+# A result table is created to collect the RMSE results from different modelling
+rmse_results <- data.frame(Method = "gbm", RMSE = RMSE_gbm) %>%  print()
+```
+
+
+# Results
+
+Both the TensorFlow and caret frameworks were successful in predicting the outcome of cancer using machine learning. Initial analysis suggests that all the methods through two platforms achieved high accuracy, as evidenced by the low root mean squared error (RMSE) values (less than 0.1). As expected, the TensorFlow approach demonstrated faster computational speed. However, the algorithms in caret provided greater insight into the potential predictors, enabling a better understanding of the relationships between variables. GBM was a good example to rank the importance of the predictors.  
+
+
+# Conclusion
+
+Predicting cancer outcomes can be achieved using either TensorFlow in Python or caret in R. Further optimization of these methods may lead to even higher accuracy when a dataset constains complicated variables.
